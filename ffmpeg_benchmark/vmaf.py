@@ -1,14 +1,14 @@
-# WIP
+import json
 import time
 import ffmpeg
-from ffmpeg_benchmark import utils
+import handystats
 from ffmpeg_benchmark import probe
 
-STATS_FILE = "vmaf_logfile.txt"
+STATS_FILE = "vmaf.json"
 
 
 def make_parser(subparsers):
-    parser = subparsers.add_parser("wmaf", help="Evaluate quality with WMAF")
+    parser = subparsers.add_parser("vmaf", help="Evaluate quality with WMAF")
 
     parser.add_argument("--original-input", "-i")
     parser.add_argument("--new-input", "-I")
@@ -20,12 +20,6 @@ def vmaf(
     new_input,
     stats_file=STATS_FILE,
 ):
-    # ffmpeg -i videoToCompare.mp4 -i originalVideo.mp4 -lavfi libvmaf="model_path=vmaf_v0.6.1.pkl":log_path=vmaf_logfile.txt -f null -
-    # ffmpeg -i /tmp/foo.mp4 -i assets/BigBuckBunny_320x180.mp4  -lavfi vmaf=stats_file=vmaf_logfile.txt -f null -
-    ori_probe = probe.probe(ori_input)
-    new_probe = probe.probe(new_input)
-    import ipdb; ipdb.set_trace()
-
     ori_stream = ffmpeg.input(ori_input)
     new_stream = ffmpeg.input(new_input)
     streams = (ori_stream, new_stream)
@@ -33,6 +27,8 @@ def vmaf(
     filter_graph = ffmpeg.filter(
         stream_spec=streams,
         filter_name='libvmaf',
+        log_fmt='json',
+        log_path=stats_file,
     )
 
     output_kwargs = {
@@ -42,19 +38,26 @@ def vmaf(
 
     t0 = time.time()
     stdout, stderr = output.run(
+        capture_stdout=True,
+        capture_stderr=True,
     )
     elapsed = time.time() - t0
 
-    vmaf_data = []
     with open(stats_file) as fd:
-        vmaf_data = [
-            dict(RE_PSNR.findall(line))
-            for line in fd.readlines()
-        ]
-    vmaf_stats = {}
-    for key in vmaf_data[0].keys():
-        data = [float(d[key]) for d in vmaf_data if d[key] != 'inf']
-        vmaf_stats.update(utils.full_stats(data, f"{key}_"))
+        raw_results = json.load(fd)
+
+    vmaf_stats = {
+        'version': raw_results['version'],
+        'num_frames': len(raw_results['frames']),
+        'fps': raw_results['fps'],
+    }
+    frames_stats = raw_results['frames']
+    for key in frames_stats[0]['metrics'].keys():
+        data = [float(d['metrics'][key]) for d in frames_stats]
+        vmaf_stats.update(handystats.full_stats(
+            data,
+            prefix=f"{key}_",
+        ))
 
     return {
         'elapsed': elapsed,
@@ -65,4 +68,12 @@ def vmaf(
 
 
 def main(args):
-    return {}
+    results = vmaf(
+        ori_input=args.original_input,
+        new_input=args.new_input,
+        stats_file=args.stats_file,
+    )
+
+    return {
+        **results,
+    }

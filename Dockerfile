@@ -1,4 +1,4 @@
-FROM linuxserver/ffmpeg
+FROM linuxserver/ffmpeg:latest
 
 COPY . /ffmpeg-benchmark
 

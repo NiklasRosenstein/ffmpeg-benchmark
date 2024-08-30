@@ -1,7 +1,7 @@
 import re
 import time
 import ffmpeg
-from ffmpeg_benchmark import utils
+import handystats
 
 RE_PSNR = re.compile(r'([^:]+):([a-z_0-9\.]+)')
 STATS_FILE = "psnr_logfile.txt"
@@ -52,7 +52,10 @@ def psnr(
     psnr_stats = {}
     for key in psnr_data[0].keys():
         data = [float(d[key]) for d in psnr_data if d[key] != 'inf']
-        psnr_stats.update(utils.full_stats(data, f"{key}_"))
+        psnr_stats.update(handystats.full_stats(
+            data=data,
+            prefix=f"{key}_",
+        ))
 
     return {
         'elapsed': elapsed,

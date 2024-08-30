@@ -1,8 +1,11 @@
+import re
 import time
 import platform
 import logging
 import ffmpeg
+from ffmpeg_benchmark import probe
 from ffmpeg_benchmark import psnr
+from ffmpeg_benchmark import vmaf
 
 try:
     from probes import ProbeManager
@@ -12,6 +15,19 @@ except ImportError:
 
 logger = logging.getLogger('ffmpeg_benchmark')
 
+RE_BENCH = re.compile(r'([^=]+)=([0-9\.]+)[^ ]* *')
+
+# Scale presets
+# uhd2160
+# uhd4320
+# 4k
+# hd1080
+# hd720
+# hd480
+# vga
+# svga
+# xfix
+# xsrv
 
 def make_parser(subparsers):
     parser = subparsers.add_parser("transcode", help="Evaluate transcoding performance")
@@ -23,9 +39,9 @@ def make_parser(subparsers):
 
     parser.add_argument("-pre", help="Preset name")
 
-    parser.add_argument("--output", "-o")
-    parser.add_argument('--output-scale', required=False)
+    parser.add_argument("--output", "-o", default="/dev/null")
     parser.add_argument('--output-format', "-f", required=False)
+    parser.add_argument('--output-scale', required=False)
     parser.add_argument('--output-video-bitrate', '-ob:v', required=False)
     parser.add_argument("--output-video-codec", '-oc:v', required=False)
     parser.add_argument("--output-audio-codec", '-oc:a', required=False)
@@ -51,19 +67,80 @@ def make_parser(subparsers):
 
 def transcode(
     input,
+
     output,
+    output_format=None,
+    output_scale=None,
     output_video_codec=None,
-
-    monitoring_enabled=False,
-    monitoring_interval=False,
-    monitoring_output=False,
-    monitoring_probers=None,
 ):
+    input_kwargs = {}
+    input_probe = probe.probe(input)
+    input_probe_data = probe.extract_data(input_probe)
+    stream = ffmpeg.input(input, **input_kwargs)
 
+    if output_scale:
+        stream = stream.filter(
+            'scale', size=output_scale,
+        )
+
+    output_kwargs = {
+        'benchmark': None,
+    }
+    if output_video_codec:
+        output_kwargs['c:v'] = output_video_codec
+    if output == '/dev/null':
+        output_kwargs['format'] = output_format or 'null'
+
+    logger.debug('Output kwargs: %s', output_kwargs)
+    output_stream = stream.output(output, **output_kwargs)
+
+    t0 = time.time()
+    try:
+        stdout, stderr = output_stream.run(
+            capture_stdout=True,
+            capture_stderr=True,
+            overwrite_output=True,
+        )
+        elapsed = time.time() - t0
+    except ffmpeg._run.Error as err:
+        logger.error(err.stderr.decode())
+        raise
+
+    results = {
+        'elapsed': elapsed,
+        'stdout': stdout,
+        'stderr': stderr,
+        **input_probe_data,
+        'fps': input_probe_data['nb_frames'] / elapsed,
+
+        'output_format': output_format,
+        'output_scale': output_scale,
+        'output_video_codec': output_video_codec,
+    }
+
+    return results
+
+
+def parse_output(stdout, stderr):
+    results = {}
+    stderr = stderr.decode()
+    for line in stderr.splitlines():
+        if line.startswith('bench:'):
+            results.update(RE_BENCH.findall(line.split(': ')[1]))
+    stdout = stdout.decode()
+    for line in stdout.splitlines():
+        pass
+    return results
+
+
+def main(args):
+
+    monitoring_enabled = args.monitoring_enabled
     if not has_probes and monitoring_enabled:
         logger.warning("Monitoring is enabled without probes, please install it")
         monitoring_enabled = False
     if monitoring_enabled:
+        monitoring_probers = args.monitoring_probers
         if not monitoring_probers:
             monitoring_probers = [
                 'probes.probers.system.CpuProber',
@@ -73,57 +150,22 @@ def transcode(
             if sys_plat == 'Darwin':
                 monitoring_probers += ['probes.probers.macos.MacosProber']
         probe_manager = ProbeManager(
-            interval=monitoring_interval,
+            interval=args.monitoring_interval,
             probers=monitoring_probers,
         )
         probe_manager.start()
 
-    input_kwargs = {}
-    stream = ffmpeg.input(input, **input_kwargs)
-
-    output_kwargs = {
-    }
-    if output_video_codec:
-        output_kwargs['c:v'] = output_video_codec
-    output = stream.output(output, **output_kwargs)
-
-    t0 = time.time()
-    stdout, stderr = output.run(
-        capture_stdout=True,
-        capture_stderr=True,
-        overwrite_output=True,
-    )
-    elapsed = time.time() - t0
-
-    if monitoring_enabled:
-        probe_manager.stop()
-
-    results = {
-        'elapsed': elapsed,
-        'stdout': stdout,
-        'stderr': stderr,
-    }
-
-    return results
-
-
-def parse_output(stdout, stderr):
-    results = {}
-    return results
-
-
-def main(args):
     results = transcode(
         input=args.input,
 
         output=args.output,
+        output_format=args.output_format,
+        output_scale=args.output_scale,
         output_video_codec=args.output_video_codec,
-
-        monitoring_enabled=args.monitoring_enabled,
-        monitoring_interval=args.monitoring_interval,
-        monitoring_output=args.monitoring_output,
-        monitoring_probers=args.monitoring_probers,
     )
+
+    if monitoring_enabled:
+        probe_manager.stop()
 
     results.update(parse_output(
         results.pop('stdout'),
@@ -144,6 +186,21 @@ def main(args):
             if 'psnr' not in key:
                 result_key = f"psnr_{result_key}"
             results[result_key] = psnr_results[key]
+
+    if args.enable_vmaf:
+        vmaf_results = vmaf.vmaf(
+            ori_input=args.input,
+            new_input=args.output,
+            stats_file=args.vmaf_stats_file,
+        )
+        skipped = ('stdout', 'stderr')
+        for key in vmaf_results:
+            if key in skipped:
+                continue
+            result_key = key.strip()
+            if 'vmaf' not in key:
+                result_key = f"vmaf_{result_key}"
+            results[result_key] = vmaf_results[key]
 
     return {
         **results,

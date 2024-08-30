@@ -6,14 +6,14 @@ import argparse
 from ffmpeg_benchmark import probe
 from ffmpeg_benchmark import transcode
 from ffmpeg_benchmark import psnr
-# from ffmpeg_benchmark import vmaf
+from ffmpeg_benchmark import vmaf
 from ffmpeg_benchmark.loggers import logger
 
 ACTIONS = {
     'probe': probe.main,
     'transcode': transcode.main,
     'psnr': psnr.main,
-    # 'vmaf': vmaf.main,
+    'vmaf': vmaf.main,
 }
 
 
@@ -30,7 +30,7 @@ def main():
     probe.make_parser(subparsers)
     transcode.make_parser(subparsers)
     psnr.make_parser(subparsers)
-    # vvmaf.make_parser(subparsers)
+    vmaf.make_parser(subparsers)
 
     args = parser.parse_args()
 

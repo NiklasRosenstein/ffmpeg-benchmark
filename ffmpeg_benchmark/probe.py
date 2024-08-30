@@ -18,6 +18,20 @@ def probe(input):
     return video_stream
 
 
+def extract_data(probe):
+    return {
+        'bit_rate': int(probe['bit_rate']),
+        # 'bits_per_raw_sample': int(probe['bits_per_raw_sample']),
+        'codec_name': probe['codec_name'],
+        'duration': float(probe['duration']),
+        'height': probe['height'],
+        'width': probe['width'],
+        'nb_frames': int(probe['nb_frames']),
+        'pix_fmt': probe['pix_fmt'],
+        # 'field_order': probe['field_order'],
+    }
+
+
 def main(args):
     results = probe(
         input=args.input,
