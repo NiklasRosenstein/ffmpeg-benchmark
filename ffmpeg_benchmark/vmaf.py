@@ -1,8 +1,11 @@
+import logging
 import json
 import time
 import ffmpeg
 import handystats
 from ffmpeg_benchmark import probe
+
+logger = logging.getLogger('ffmpeg_benchmark')
 
 STATS_FILE = "vmaf.json"
 
@@ -19,10 +22,33 @@ def vmaf(
     ori_input,
     new_input,
     stats_file=STATS_FILE,
+    ori_probe=None,
+    new_probe=None,
 ):
     ori_stream = ffmpeg.input(ori_input)
     new_stream = ffmpeg.input(new_input)
-    streams = (ori_stream, new_stream)
+
+    ori_probe = ori_probe or probe.probe(ori_input)
+    new_probe = new_probe or probe.probe(new_input)
+
+    ori_size = (ori_probe['streams'][0]['width'], ori_probe['streams'][0]['height'])
+    new_size = (new_probe['streams'][0]['width'], new_probe['streams'][0]['height'])
+    diff_size = ori_size != new_size
+
+    if diff_size:
+        ori_rescaled = ori_stream.filter(
+            'scale',
+            size=f"{ori_size[0]}x{ori_size[1]}",
+            flags='bicubic',
+        )
+        new_rescaled = new_stream.filter(
+            'scale',
+            size=f"{ori_size[0]}x{ori_size[1]}",
+            flags='bicubic',
+        )
+        streams = (ori_rescaled, new_rescaled)
+    else:
+        streams = (ori_stream, new_stream)
 
     filter_graph = ffmpeg.filter(
         stream_spec=streams,
@@ -37,11 +63,15 @@ def vmaf(
     output = filter_graph.output('/dev/null', **output_kwargs)
 
     t0 = time.time()
-    stdout, stderr = output.run(
-        capture_stdout=True,
-        capture_stderr=True,
-    )
-    elapsed = time.time() - t0
+    try:
+        stdout, stderr = output.run(
+            capture_stdout=True,
+            capture_stderr=True,
+        )
+        elapsed = time.time() - t0
+    except ffmpeg._run.Error as err:
+        logger.error(err.stderr.decode())
+        raise
 
     with open(stats_file) as fd:
         raw_results = json.load(fd)

@@ -49,7 +49,9 @@ def make_parser(subparsers):
     parser.add_argument("--enable-psnr", action="store_true")
     parser.add_argument("--psnr-stats-file", default=psnr.STATS_FILE)
     parser.add_argument("--enable-vmaf", action="store_true")
-    parser.add_argument("--vmaf-stats-file", default="vmaf_logfile.txt")
+    parser.add_argument("--vmaf-stats-file", default=vmaf.STATS_FILE)
+
+    parser.add_argument("--hwaccel", default="none")
 
     parser.add_argument(
         '--disable-monitoring', action="store_false", dest="monitoring_enabled",
@@ -65,59 +67,92 @@ def make_parser(subparsers):
     )
 
 
-def transcode(
-    input,
+class Transcoder:
+    def __init__(
+        self,
+        input,
 
-    output,
-    output_format=None,
-    output_scale=None,
-    output_video_codec=None,
-):
-    input_kwargs = {}
-    input_probe = probe.probe(input)
-    input_probe_data = probe.extract_data(input_probe)
-    stream = ffmpeg.input(input, **input_kwargs)
+        output,
+        output_format=None,
+        output_scale=None,
+        output_video_codec=None,
 
-    if output_scale:
-        stream = stream.filter(
-            'scale', size=output_scale,
-        )
+        hwaccel='none',
+    ):
+        self.input = input
 
-    output_kwargs = {
-        'benchmark': None,
-    }
-    if output_video_codec:
-        output_kwargs['c:v'] = output_video_codec
-    if output == '/dev/null':
-        output_kwargs['format'] = output_format or 'null'
+        self.output = output
+        self.output_format = output_format
+        self.output_scale = output_scale
+        self.output_video_codec = output_video_codec
 
-    logger.debug('Output kwargs: %s', output_kwargs)
-    output_stream = stream.output(output, **output_kwargs)
+        self.hwaccel = hwaccel
 
-    t0 = time.time()
-    try:
-        stdout, stderr = output_stream.run(
-            capture_stdout=True,
-            capture_stderr=True,
-            overwrite_output=True,
-        )
-        elapsed = time.time() - t0
-    except ffmpeg._run.Error as err:
-        logger.error(err.stderr.decode())
-        raise
+    @property
+    def input_probe(self):
+        if not hasattr(self, '_input_probe'):
+            self._input_probe = probe.probe(self.input)
+        return self._input_probe
 
-    results = {
-        'elapsed': elapsed,
-        'stdout': stdout,
-        'stderr': stderr,
-        **input_probe_data,
-        'fps': input_probe_data['nb_frames'] / elapsed,
+    @property
+    def input_probe_data(self):
+        if not hasattr(self, '_input_probe_data'):
+            self._input_probe_data = probe.extract_data(self.input_probe)
+        return self._input_probe_data
 
-        'output_format': output_format,
-        'output_scale': output_scale,
-        'output_video_codec': output_video_codec,
-    }
+    def run(self):
+        input_kwargs = {
+            'hwaccel': self.hwaccel,
+        }
+        logger.debug('Input kwargs: %s', input_kwargs)
+        stream = ffmpeg.input(self.input, **input_kwargs)
 
+        if self.output_scale:
+            stream = stream.filter(
+                'scale', size=self.output_scale,
+            )
+
+        output_kwargs = {
+            'benchmark': None,
+        }
+        if self.output_video_codec:
+            output_kwargs['c:v'] = self.output_video_codec
+        if self.output == '/dev/null':
+            output_kwargs['format'] = self.output_format or 'null'
+
+        logger.debug('Output kwargs: "%s", %s', self.output, output_kwargs)
+        output_stream = stream.output(self.output, **output_kwargs)
+
+        t0 = time.time()
+        try:
+            stdout, stderr = output_stream.run(
+                capture_stdout=True,
+                capture_stderr=True,
+                overwrite_output=True,
+            )
+            elapsed = time.time() - t0
+        except ffmpeg._run.Error as err:
+            logger.error(err.stderr.decode())
+            raise
+
+        results = {
+            'elapsed': elapsed,
+            'stdout': stdout,
+            'stderr': stderr,
+            **self.input_probe_data,
+            'output_format': self.output_format,
+            'output_scale': self.output_scale,
+            'output_video_codec': self.output_video_codec,
+
+            'fps': self.input_probe_data['video_nb_frames'] / elapsed,
+        }
+
+        return results
+
+
+def transcode(**kwargs):
+    transcoder = Transcoder(**kwargs)
+    results = transcoder.run()
     return results
 
 
@@ -134,7 +169,6 @@ def parse_output(stdout, stderr):
 
 
 def main(args):
-
     monitoring_enabled = args.monitoring_enabled
     if not has_probes and monitoring_enabled:
         logger.warning("Monitoring is enabled without probes, please install it")
@@ -172,7 +206,9 @@ def main(args):
         results.pop('stderr'),
     ))
 
-    if args.enable_psnr:
+    if args.enable_psnr and args.output == '/dev/null':
+        logger.warning("PSNR cannot used with a stream to %s", args.output)
+    elif args.enable_psnr:
         psnr_results = psnr.psnr(
             ori_input=args.input,
             new_input=args.output,
@@ -187,7 +223,9 @@ def main(args):
                 result_key = f"psnr_{result_key}"
             results[result_key] = psnr_results[key]
 
-    if args.enable_vmaf:
+    if args.enable_vmaf and args.output == '/dev/null':
+        logger.warning("VMAF cannot used with a stream to %s", args.output)
+    elif args.enable_vmaf:
         vmaf_results = vmaf.vmaf(
             ori_input=args.input,
             new_input=args.output,
