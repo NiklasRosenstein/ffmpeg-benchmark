@@ -45,6 +45,7 @@ def make_parser(subparsers):
     parser.add_argument('--output-video-bitrate', '-ob:v', required=False)
     parser.add_argument("--output-video-codec", '-oc:v', required=False)
     parser.add_argument("--output-audio-codec", '-oc:a', required=False)
+    parser.add_argument("--output-disable-audio", action="store_true")
 
     parser.add_argument("--enable-psnr", action="store_true")
     parser.add_argument("--psnr-stats-file", default=psnr.STATS_FILE)
@@ -76,6 +77,7 @@ class Transcoder:
         output_format=None,
         output_scale=None,
         output_video_codec=None,
+        output_disable_audio=None,
 
         hwaccel='none',
     ):
@@ -85,6 +87,7 @@ class Transcoder:
         self.output_format = output_format
         self.output_scale = output_scale
         self.output_video_codec = output_video_codec
+        self.output_disable_audio = output_disable_audio
 
         self.hwaccel = hwaccel
 
@@ -97,8 +100,30 @@ class Transcoder:
     @property
     def input_probe_data(self):
         if not hasattr(self, '_input_probe_data'):
-            self._input_probe_data = probe.extract_data(self.input_probe)
+            self._input_probe_data = {
+                f"input_{key}": value
+                for key, value in probe.extract_data(self.input_probe).items()
+            }
         return self._input_probe_data
+
+    @property
+    def output_probe(self):
+        if self.output == '/dev/null':
+            return {}
+        if not hasattr(self, '_output_probe'):
+            self._output_probe = probe.probe(self.output)
+        return self._output_probe
+
+    @property
+    def output_probe_data(self):
+        if self.output == '/dev/null':
+            return {}
+        if not hasattr(self, '_output_probe_data'):
+            self._output_probe_data = {
+                f"output_{key}": value
+                for key, value in probe.extract_data(self.output_probe).items()
+            }
+        return self._output_probe_data
 
     def run(self):
         input_kwargs = {
@@ -119,6 +144,8 @@ class Transcoder:
             output_kwargs['c:v'] = self.output_video_codec
         if self.output == '/dev/null':
             output_kwargs['format'] = self.output_format or 'null'
+        if self.output_disable_audio:
+            output_kwargs['an'] = None
 
         logger.debug('Output kwargs: "%s", %s', self.output, output_kwargs)
         output_stream = stream.output(self.output, **output_kwargs)
@@ -140,11 +167,12 @@ class Transcoder:
             'stdout': stdout,
             'stderr': stderr,
             **self.input_probe_data,
+            **self.output_probe_data,
             'output_format': self.output_format,
             'output_scale': self.output_scale,
             'output_video_codec': self.output_video_codec,
 
-            'fps': self.input_probe_data['video_nb_frames'] / elapsed,
+            'fps': self.input_probe_data['input_video_nb_frames'] / elapsed,
         }
 
         return results
