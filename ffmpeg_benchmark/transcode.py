@@ -45,6 +45,11 @@ PRESETS = (
     'slower',
     'veryslow',
 )
+TUNES = (
+    'film',
+    'animation',
+    'grain',
+)
 
 
 def make_parser(subparsers):
@@ -60,6 +65,7 @@ def make_parser(subparsers):
 
     parser.add_argument("--preset", help="Preset name", required=False, choices=PRESETS)
     parser.add_argument("--crf", type=int, required=False, help="From 0 (loseless), max depends of codec")
+    parser.add_argument("--tune", required=False, choices=TUNES)
 
     parser.add_argument("--output", "-o", default="/dev/null")
     parser.add_argument('--output-format', "-f", required=False)
@@ -100,6 +106,7 @@ class Transcoder:
 
         preset=None,
         crf=None,
+        tune=None,
 
         output=None,
         output_format=None,
@@ -118,6 +125,7 @@ class Transcoder:
 
         self.preset = preset
         self.crf = crf
+        self.tune = tune
 
         self.output = output
         self.output_format = output_format
@@ -200,6 +208,8 @@ class Transcoder:
             output_kwargs['preset'] = self.preset
         if self.crf is not None:
             output_kwargs['crf'] = self.crf
+        if self.tune:
+            output_kwargs['tune'] = self.tune
         if self.output_video_codec:
             output_kwargs['c:v'] = self.output_video_codec
         if self.output == '/dev/null':
@@ -260,6 +270,7 @@ class Transcoder:
 
             'preset': self.preset,
             'crf': self.crf,
+            'tune': self.tune,
 
             'input': self.input,
             **self.input_probe_data,
@@ -319,6 +330,7 @@ def main(args):
 
         preset=args.preset,
         crf=args.crf,
+        tune=args.tune,
 
         output=args.output,
         output_format=args.output_format,
