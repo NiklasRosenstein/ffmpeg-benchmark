@@ -56,12 +56,14 @@ def make_parser(subparsers):
     parser = subparsers.add_parser("transcode", help="Evaluate transcoding performance")
 
     parser.add_argument("--processes", "-p", type=int, default=1, help="Number of simulataneous ffmpeg process.")
+    parser.add_argument("--filter-threads", type=int, help="Number of threads are used to process a filter pipeline.")
 
     parser.add_argument("--input", "-i")
     parser.add_argument("--input-format", "-if", required=False)
     parser.add_argument("--input-video-codec", '-ic:v', required=False)
     parser.add_argument("--input-audio-codec", '-ic:a', required=False)
     parser.add_argument("--input-disable-audio", action='store_true')
+    parser.add_argument("--input-thread-queue-size", type=int, required=False, help="Max number of queued packets when reading from the file or device")
 
     parser.add_argument("--preset", help="Preset name", required=False, choices=PRESETS)
     parser.add_argument("--crf", type=int, required=False, help="From 0 (loseless), max depends of codec")
@@ -74,6 +76,7 @@ def make_parser(subparsers):
     parser.add_argument("--output-video-codec", '-oc:v', required=False)
     # parser.add_argument("--output-audio-codec", '-oc:a', required=False)
     parser.add_argument("--output-disable-audio", action="store_true")
+    parser.add_argument("--output-thread-queue-size", type=int, required=False, help="Max number of packets that may be queued to each muxing thread.")
 
     parser.add_argument("--enable-psnr", action="store_true")
     parser.add_argument("--psnr-stats-file", default=psnr.STATS_FILE)
@@ -99,10 +102,13 @@ def make_parser(subparsers):
 class Transcoder:
     def __init__(
         self,
-        processes,
-
         input,
+
+        processes=1,
+        filter_threads=None,
+
         input_disable_audio=False,
+        input_thread_queue_size=None,
 
         preset=None,
         crf=None,
@@ -113,15 +119,18 @@ class Transcoder:
         output_scale=None,
         output_video_codec=None,
         output_disable_audio=None,
+        output_thread_queue_size=None,
 
         hwaccel='none',
 
         verbosity=1,
     ):
         self.processes = processes
+        self.filter_threads = filter_threads
 
         self.input = input
         self.input_disable_audio = input_disable_audio
+        self.input_thread_queue_size = input_thread_queue_size
 
         self.preset = preset
         self.crf = crf
@@ -132,6 +141,7 @@ class Transcoder:
         self.output_scale = output_scale
         self.output_video_codec = output_video_codec
         self.output_disable_audio = output_disable_audio
+        self.output_thread_queue_size = output_thread_queue_size
 
         self.hwaccel = hwaccel
 
@@ -188,19 +198,24 @@ class Transcoder:
         return results
 
     def run(self):
+        # Make input
         input_kwargs = {
             'hwaccel': self.hwaccel,
         }
         if self.input_disable_audio:
             input_kwargs['an'] = None
+        if self.filter_threads is not None:
+            input_kwargs['filter_threads'] = self.filter_threads
+        if self.input_thread_queue_size is not None:
+            input_kwargs['thread_queue_size'] = self.input_thread_queue_size
         logger.debug('Input kwargs: %s', input_kwargs)
         stream = ffmpeg.input(self.input, **input_kwargs)
-
+        # Apply filter
         if self.output_scale:
             stream = stream.filter(
                 'scale', size=self.output_scale,
             )
-
+        # Make output
         output_kwargs = {
             'benchmark': None,
         }
@@ -216,10 +231,12 @@ class Transcoder:
             output_kwargs['format'] = self.output_format or 'null'
         if self.output_disable_audio:
             output_kwargs['an'] = None
+        if self.output_thread_queue_size is not None:
+            output_kwargs['thread_queue_size'] = self.output_thread_queue_size
 
         logger.debug('Output kwargs: "%s", %s', self.output, output_kwargs)
         output_stream = stream.output(self.output, **output_kwargs)
-
+        # Run transcoding
         def _run(i):
             logger.info("Started stream #%s", i)
             cmd_logger.debug(output_stream)
@@ -255,7 +272,7 @@ class Transcoder:
             for i in range(self.processes):
                 futures.append(executor.submit(_run, i))
         results = [f.result() for f in futures]
-
+        # Compute values
         ffmpeg_version = results[0]['ffmpeg_version']
 
         elapseds = [r['elapsed'] for r in results if r['ok']]
@@ -267,6 +284,7 @@ class Transcoder:
         results = {
             'ffmpeg_version': ffmpeg_version,
             'processes': self.processes,
+            'filter_threads': self.filter_threads,
 
             'preset': self.preset,
             'crf': self.crf,
@@ -275,6 +293,7 @@ class Transcoder:
             'input': self.input,
             **self.input_probe_data,
             'input_disable_audio': self.input_disable_audio,
+            'input_thread_queue_size': self.input_thread_queue_size,
 
             'output': self.output,
             **self.output_probe_data,
@@ -282,6 +301,7 @@ class Transcoder:
             'output_scale': self.output_scale,
             'output_video_codec': self.output_video_codec,
             'output_disable_audio': self.output_disable_audio,
+            'output_thread_queue_size': self.output_thread_queue_size,
 
             'error_count': error_count,
             'elapseds': elapseds,
@@ -323,10 +343,13 @@ def main(args):
         logger.debug("Monitoring prober: %s", monitoring_probers)
 
     results = transcode(
+        hwaccel=args.hwaccel,
         processes=args.processes,
+        filter_threads=args.filter_threads,
 
         input=args.input,
         input_disable_audio=args.input_disable_audio,
+        input_thread_queue_size=args.input_thread_queue_size,
 
         preset=args.preset,
         crf=args.crf,
@@ -337,8 +360,7 @@ def main(args):
         output_scale=args.output_scale,
         output_video_codec=args.output_video_codec,
         output_disable_audio=args.output_disable_audio,
-
-        hwaccel=args.hwaccel,
+        output_thread_queue_size=args.output_thread_queue_size,
 
         verbosity=args.verbosity,
     )
