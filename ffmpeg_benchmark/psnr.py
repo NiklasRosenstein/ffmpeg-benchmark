@@ -6,6 +6,7 @@ import handystats
 from ffmpeg_benchmark import probe
 
 logger = logging.getLogger('ffmpeg_benchmark')
+cmd_logger = logging.getLogger('ffmpeg_benchmark_cmd')
 
 RE_PSNR = re.compile(r'([^:]+):([a-z_0-9\.]+)')
 STATS_FILE = "psnr_logfile.txt"
@@ -53,9 +54,9 @@ def psnr(
             'fps',
             fps='30/1',
         )
-        streams = (ori_rescaled, new_rescaled)
+        streams = (new_rescaled, ori_rescaled)
     else:
-        streams = (ori_stream, new_stream)
+        streams = (new_stream, ori_stream)
 
     filter_graph = ffmpeg.filter(
         stream_spec=streams,
@@ -68,6 +69,8 @@ def psnr(
     }
     output = filter_graph.output('/dev/null', **output_kwargs)
 
+    logger.info("Started PSNR %s<>%s", ori_input, new_input)
+    cmd_logger.debug(output)
     t0 = time.time()
     try:
         stdout, stderr = output.run(
@@ -107,7 +110,4 @@ def main(args):
         output=args.output,
         output_video_codec=args.output_video_codec,
     )
-
-    return {
-        **results,
-    }
+    return results

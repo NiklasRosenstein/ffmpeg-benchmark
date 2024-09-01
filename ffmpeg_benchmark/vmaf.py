@@ -6,6 +6,7 @@ import handystats
 from ffmpeg_benchmark import probe
 
 logger = logging.getLogger('ffmpeg_benchmark')
+cmd_logger = logging.getLogger('ffmpeg_benchmark_cmd')
 
 STATS_FILE = "vmaf.json"
 
@@ -46,9 +47,9 @@ def vmaf(
             size=f"{ori_size[0]}x{ori_size[1]}",
             flags='bicubic',
         )
-        streams = (ori_rescaled, new_rescaled)
+        streams = (new_rescaled, ori_rescaled)
     else:
-        streams = (ori_stream, new_stream)
+        streams = (new_stream, new_stream)
 
     filter_graph = ffmpeg.filter(
         stream_spec=streams,
@@ -62,6 +63,8 @@ def vmaf(
     }
     output = filter_graph.output('/dev/null', **output_kwargs)
 
+    logger.info("Started VMAF %s<>%s", ori_input, new_input)
+    cmd_logger.debug(output)
     t0 = time.time()
     try:
         stdout, stderr = output.run(
@@ -103,7 +106,4 @@ def main(args):
         new_input=args.new_input,
         stats_file=args.stats_file,
     )
-
-    return {
-        **results,
-    }
+    return results

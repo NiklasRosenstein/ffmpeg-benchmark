@@ -7,7 +7,8 @@ from ffmpeg_benchmark import probe
 from ffmpeg_benchmark import transcode
 from ffmpeg_benchmark import psnr
 from ffmpeg_benchmark import vmaf
-from ffmpeg_benchmark.loggers import logger
+from ffmpeg_benchmark import __version__
+from ffmpeg_benchmark.loggers import set_logger
 
 ACTIONS = {
     'probe': probe.main,
@@ -19,7 +20,7 @@ ACTIONS = {
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--verbosity", type=int, default=0, help="0: Muted, 1: Info, 2: Verbose")
+    parser.add_argument("-v", "--verbosity", type=int, default=0, help="0: Muted, 1: Info, 2: Verbose, 3: Full verbose 4: ffmpeg verbose")
     parser.add_argument(
         '-q', '--quiet',
         action="store_true",
@@ -34,16 +35,12 @@ def main():
 
     args = parser.parse_args()
 
-    verbosity = args.verbosity
-    if args.quiet:
-        verbosity = 0
-        logger.setLevel(40-(10+verbosity*10))
+    set_logger(0 if args.quiet else args.verbosity)
 
     action = ACTIONS[args.action]
-    result = action(args)
 
-    result.update(
-    )
+    print(f"version: {__version__}")
+    result = action(args)
     for key, value in result.items():
         print(f"{key}: {value}")
 

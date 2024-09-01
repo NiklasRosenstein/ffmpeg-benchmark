@@ -2,10 +2,15 @@ import re
 import time
 import platform
 import logging
+from concurrent.futures import ThreadPoolExecutor
+
 import ffmpeg
+import handystats
+
 from ffmpeg_benchmark import probe
 from ffmpeg_benchmark import psnr
 from ffmpeg_benchmark import vmaf
+from ffmpeg_benchmark import utils
 
 try:
     from probes import ProbeManager
@@ -14,6 +19,7 @@ except ImportError:
     has_probes = False
 
 logger = logging.getLogger('ffmpeg_benchmark')
+cmd_logger = logging.getLogger('ffmpeg_benchmark_cmd')
 
 RE_BENCH = re.compile(r'([^=]+)=([0-9\.]+)[^ ]* *')
 
@@ -28,23 +34,39 @@ RE_BENCH = re.compile(r'([^=]+)=([0-9\.]+)[^ ]* *')
 # svga
 # xfix
 # xsrv
+PRESETS = (
+    'ultrafast',
+    'superfast',
+    'veryfast',
+    'faster',
+    'fast',
+    'medium',
+    'slow',
+    'slower',
+    'veryslow',
+)
+
 
 def make_parser(subparsers):
     parser = subparsers.add_parser("transcode", help="Evaluate transcoding performance")
+
+    parser.add_argument("--processes", "-p", type=int, default=1, help="Number of simulataneous ffmpeg process.")
 
     parser.add_argument("--input", "-i")
     parser.add_argument("--input-format", "-if", required=False)
     parser.add_argument("--input-video-codec", '-ic:v', required=False)
     parser.add_argument("--input-audio-codec", '-ic:a', required=False)
+    parser.add_argument("--input-disable-audio", action='store_true')
 
-    parser.add_argument("-pre", help="Preset name")
+    parser.add_argument("--preset", help="Preset name", required=False, choices=PRESETS)
+    parser.add_argument("--crf", type=int, required=False, help="From 0 (loseless), max depends of codec")
 
     parser.add_argument("--output", "-o", default="/dev/null")
     parser.add_argument('--output-format', "-f", required=False)
     parser.add_argument('--output-scale', required=False)
     parser.add_argument('--output-video-bitrate', '-ob:v', required=False)
     parser.add_argument("--output-video-codec", '-oc:v', required=False)
-    parser.add_argument("--output-audio-codec", '-oc:a', required=False)
+    # parser.add_argument("--output-audio-codec", '-oc:a', required=False)
     parser.add_argument("--output-disable-audio", action="store_true")
 
     parser.add_argument("--enable-psnr", action="store_true")
@@ -71,17 +93,31 @@ def make_parser(subparsers):
 class Transcoder:
     def __init__(
         self,
-        input,
+        processes,
 
-        output,
+        input,
+        input_disable_audio=False,
+
+        preset=None,
+        crf=None,
+
+        output=None,
         output_format=None,
         output_scale=None,
         output_video_codec=None,
         output_disable_audio=None,
 
         hwaccel='none',
+
+        verbosity=1,
     ):
+        self.processes = processes
+
         self.input = input
+        self.input_disable_audio = input_disable_audio
+
+        self.preset = preset
+        self.crf = crf
 
         self.output = output
         self.output_format = output_format
@@ -90,6 +126,8 @@ class Transcoder:
         self.output_disable_audio = output_disable_audio
 
         self.hwaccel = hwaccel
+
+        self.verbosity = verbosity
 
     @property
     def input_probe(self):
@@ -125,10 +163,28 @@ class Transcoder:
             }
         return self._output_probe_data
 
+    def parse_output(self, stdout, stderr):
+        results = {}
+        stderr = stderr.decode()
+
+        lines = stderr.splitlines()
+        version = utils.parse_version(lines[0])
+        if version:
+            results['ffmpeg_version'] = version
+        for line in lines[1:]:
+            if line.startswith('bench:'):
+                results.update(RE_BENCH.findall(line.split(': ')[1]))
+        stdout = stdout.decode()
+        for line in stdout.splitlines():
+            pass
+        return results
+
     def run(self):
         input_kwargs = {
             'hwaccel': self.hwaccel,
         }
+        if self.input_disable_audio:
+            input_kwargs['an'] = None
         logger.debug('Input kwargs: %s', input_kwargs)
         stream = ffmpeg.input(self.input, **input_kwargs)
 
@@ -140,6 +196,10 @@ class Transcoder:
         output_kwargs = {
             'benchmark': None,
         }
+        if self.preset:
+            output_kwargs['preset'] = self.preset
+        if self.crf is not None:
+            output_kwargs['crf'] = self.crf
         if self.output_video_codec:
             output_kwargs['c:v'] = self.output_video_codec
         if self.output == '/dev/null':
@@ -150,29 +210,73 @@ class Transcoder:
         logger.debug('Output kwargs: "%s", %s', self.output, output_kwargs)
         output_stream = stream.output(self.output, **output_kwargs)
 
-        t0 = time.time()
-        try:
-            stdout, stderr = output_stream.run(
-                capture_stdout=True,
-                capture_stderr=True,
-                overwrite_output=True,
-            )
-            elapsed = time.time() - t0
-        except ffmpeg._run.Error as err:
-            logger.error(err.stderr.decode())
-            raise
+        def _run(i):
+            logger.info("Started stream #%s", i)
+            cmd_logger.debug(output_stream)
+            t0 = time.time()
+            try:
+                stdout, stderr = output_stream.run(
+                    capture_stdout=True,
+                    capture_stderr=True,
+                    overwrite_output=True,
+                )
+                elapsed = time.time() - t0
+            except ffmpeg._run.Error as err:
+                logger.info("stderr: %s", err.stderr.decode())
+                return {
+                    'ok': False,
+                    'stdout': err.stdout,
+                    'stderr': err.stderr,
+                    **self.parse_output(err.stdout, err.stderr),
+                }
+            if self.verbosity >= 4:
+                logger.debug("stdout: %s", stdout.decode())
+                logger.debug("stderr: %s", stderr.decode())
+            return {
+                'ok': True,
+                'elapsed': elapsed,
+                'stdout': stdout,
+                'stderr': stderr,
+                **self.parse_output(stdout, stderr),
+            }
+
+        futures = []
+        with ThreadPoolExecutor(max_workers=self.processes) as executor:
+            for i in range(self.processes):
+                futures.append(executor.submit(_run, i))
+        results = [f.result() for f in futures]
+
+        ffmpeg_version = results[0]['ffmpeg_version']
+
+        elapseds = [r['elapsed'] for r in results if r['ok']]
+        in_nb_frames = self.input_probe_data['input_video_nb_frames']
+        fpss = [(in_nb_frames/e) for e in elapseds]
+        errors = [r for r in results if not r['ok']]
+        error_count = len(errors)
 
         results = {
-            'elapsed': elapsed,
-            'stdout': stdout,
-            'stderr': stderr,
+            'ffmpeg_version': ffmpeg_version,
+            'processes': self.processes,
+
+            'preset': self.preset,
+            'crf': self.crf,
+
+            'input': self.input,
             **self.input_probe_data,
+            'input_disable_audio': self.input_disable_audio,
+
+            'output': self.output,
             **self.output_probe_data,
             'output_format': self.output_format,
             'output_scale': self.output_scale,
             'output_video_codec': self.output_video_codec,
+            'output_disable_audio': self.output_disable_audio,
 
-            'fps': self.input_probe_data['input_video_nb_frames'] / elapsed,
+            'error_count': error_count,
+            'elapseds': elapseds,
+            'fpss': fpss,
+            **handystats.full_stats(elapseds, prefix='elapsed_'),
+            **handystats.full_stats(fpss, prefix='fps_'),
         }
 
         return results
@@ -181,18 +285,6 @@ class Transcoder:
 def transcode(**kwargs):
     transcoder = Transcoder(**kwargs)
     results = transcoder.run()
-    return results
-
-
-def parse_output(stdout, stderr):
-    results = {}
-    stderr = stderr.decode()
-    for line in stderr.splitlines():
-        if line.startswith('bench:'):
-            results.update(RE_BENCH.findall(line.split(': ')[1]))
-    stdout = stdout.decode()
-    for line in stdout.splitlines():
-        pass
     return results
 
 
@@ -216,23 +308,50 @@ def main(args):
             probers=monitoring_probers,
         )
         probe_manager.start()
+        logger.info("Started monitoring")
+        logger.debug("Monitoring prober: %s", monitoring_probers)
 
     results = transcode(
+        processes=args.processes,
+
         input=args.input,
+        input_disable_audio=args.input_disable_audio,
+
+        preset=args.preset,
+        crf=args.crf,
 
         output=args.output,
         output_format=args.output_format,
         output_scale=args.output_scale,
         output_video_codec=args.output_video_codec,
+        output_disable_audio=args.output_disable_audio,
+
+        hwaccel=args.hwaccel,
+
+        verbosity=args.verbosity,
     )
 
     if monitoring_enabled:
         probe_manager.stop()
+        logger.info("Stopped monitoring")
+        probe_data = probe_manager.get_results()
 
-    results.update(parse_output(
-        results.pop('stdout'),
-        results.pop('stderr'),
-    ))
+        cpu_percents = [v['cpu_percent'] for v in probe_data['cpu'].values()]
+        results.update(handystats.full_stats(cpu_percents, prefix='cpu_percent_'))
+
+        mem_percents = [v['virtual_memory']['percent'] for v in probe_data['memory'].values()]
+        results.update(handystats.full_stats(mem_percents, prefix='mem_percent_'))
+
+        if 'nvidia' in probe_data:
+            power_usages = [v['power_usage'] for v in probe_data['nvidia'].values()]
+            results.update(handystats.full_stats(power_usages, prefix='nvidia_power_usage'))
+
+            temps = [v['temperature'] for v in probe_data['nvidia'].values()]
+            results.update(handystats.full_stats(temps, prefix='nvidia_temperature'))
+
+    if args.processes == results['error_count']:
+        logger.error('All operations failed (%s)', args.processes)
+        return results
 
     if args.enable_psnr and args.output == '/dev/null':
         logger.warning("PSNR cannot used with a stream to %s", args.output)
@@ -268,6 +387,4 @@ def main(args):
                 result_key = f"vmaf_{result_key}"
             results[result_key] = vmaf_results[key]
 
-    return {
-        **results,
-    }
+    return results
