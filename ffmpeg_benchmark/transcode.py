@@ -181,6 +181,25 @@ class Transcoder:
             }
         return self._output_probe_data
 
+    def get_diff_data(self):
+        if self.output == '/dev/null':
+            return {}
+        in_bitrate = int(self.input_probe['streams'][0]['bit_rate'])
+        out_bitrate = int(self.output_probe['streams'][0]['bit_rate'])
+        bitrate_diff = out_bitrate - in_bitrate
+        bitrate_grow = (bitrate_diff / in_bitrate) * 100
+
+        in_size = int(self.input_probe['format']['size'])
+        out_size = int(self.output_probe['format']['size'])
+        size_diff = out_size - in_size
+        size_grow = (size_diff / in_size) * 100
+        return {
+            'bitrate_diff': bitrate_diff,
+            'bitrate_grow': bitrate_grow,
+            'size_diff': size_diff,
+            'size_grow': size_grow,
+        }
+
     def parse_output(self, stdout, stderr):
         results = {}
         stderr = stderr.decode()
@@ -284,6 +303,7 @@ class Transcoder:
         results = {
             'ffmpeg_version': ffmpeg_version,
             'processes': self.processes,
+            'hwaccel': self.hwaccel,
             'filter_threads': self.filter_threads,
 
             'preset': self.preset,
@@ -302,6 +322,7 @@ class Transcoder:
             'output_video_codec': self.output_video_codec,
             'output_disable_audio': self.output_disable_audio,
             'output_thread_queue_size': self.output_thread_queue_size,
+            **self.get_diff_data(),
 
             'error_count': error_count,
             'elapseds': elapseds,
@@ -342,29 +363,34 @@ def main(args):
         logger.info("Started monitoring")
         logger.debug("Monitoring prober: %s", monitoring_probers)
 
-    results = transcode(
-        hwaccel=args.hwaccel,
-        processes=args.processes,
-        filter_threads=args.filter_threads,
+    try:
+        results = transcode(
+            hwaccel=args.hwaccel,
+            processes=args.processes,
+            filter_threads=args.filter_threads,
 
-        input=args.input,
-        input_disable_audio=args.input_disable_audio,
-        input_thread_queue_size=args.input_thread_queue_size,
+            input=args.input,
+            input_disable_audio=args.input_disable_audio,
+            input_thread_queue_size=args.input_thread_queue_size,
 
-        preset=args.preset,
-        crf=args.crf,
-        tune=args.tune,
+            preset=args.preset,
+            crf=args.crf,
+            tune=args.tune,
 
-        output=args.output,
-        output_format=args.output_format,
-        output_scale=args.output_scale,
-        output_video_codec=args.output_video_codec,
-        output_disable_audio=args.output_disable_audio,
-        output_thread_queue_size=args.output_thread_queue_size,
+            output=args.output,
+            output_format=args.output_format,
+            output_scale=args.output_scale,
+            output_video_codec=args.output_video_codec,
+            output_disable_audio=args.output_disable_audio,
+            output_thread_queue_size=args.output_thread_queue_size,
 
-        verbosity=args.verbosity,
-    )
-
+            verbosity=args.verbosity,
+        )
+    except Exception as err:
+        if monitoring_enabled:
+            probe_manager.stop()
+        raise
+    # Add monitoring data
     if monitoring_enabled:
         probe_manager.stop()
         logger.info("Stopped monitoring")
@@ -378,15 +404,15 @@ def main(args):
 
         if 'nvidia' in probe_data:
             power_usages = [v['power_usage'] for v in probe_data['nvidia'].values()]
-            results.update(handystats.full_stats(power_usages, prefix='nvidia_power_usage'))
+            results.update(handystats.full_stats(power_usages, prefix='nvidia_power_usage_'))
 
             temps = [v['temperature'] for v in probe_data['nvidia'].values()]
-            results.update(handystats.full_stats(temps, prefix='nvidia_temperature'))
-
+            results.update(handystats.full_stats(temps, prefix='nvidia_temperature_'))
+    # Handle errors
     if args.processes == results['error_count']:
         logger.error('All operations failed (%s)', args.processes)
         return results
-
+    # Add PSNR data
     if args.enable_psnr and args.output == '/dev/null':
         logger.warning("PSNR cannot used with a stream to %s", args.output)
     elif args.enable_psnr:
@@ -403,7 +429,7 @@ def main(args):
             if 'psnr' not in key:
                 result_key = f"psnr_{result_key}"
             results[result_key] = psnr_results[key]
-
+    # Add VMAF data
     if args.enable_vmaf and args.output == '/dev/null':
         logger.warning("VMAF cannot used with a stream to %s", args.output)
     elif args.enable_vmaf:
