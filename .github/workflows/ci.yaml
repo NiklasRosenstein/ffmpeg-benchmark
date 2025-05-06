@@ -22,6 +22,8 @@ jobs:
         run: uvx ruff check .
       - name: Run pyright
         run: uv run pyright
+      - name: Check README state
+        run: diff -u README.md <(uvx mksync README.md)
 
   build-and-publish:
     runs-on: ubuntu-latest
