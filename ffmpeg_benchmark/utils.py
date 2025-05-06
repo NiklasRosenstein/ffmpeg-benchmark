@@ -41,7 +41,7 @@ def download_video_file(url, filename):
                 raise ValueError("ZIP file must contain exactly one file. Got: " + str(members))
 
             with filename.open("wb") as dst, zip_fp.open(members[0], 'r') as src:
-                logger.info("Unpacking %s to %s", members[0], filename)
+                logger.info("Extracting %s to %s", members[0], filename)
                 copyfileobj(src, dst)
 
         else:
