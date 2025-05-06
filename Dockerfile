@@ -3,6 +3,7 @@ FROM linuxserver/ffmpeg:latest
 RUN apt-get update && apt-get install git -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:0.7.2 /uv /uvx /bin/
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy
 
 WORKDIR /app
 
