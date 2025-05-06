@@ -386,7 +386,7 @@ def main(args):
 
             verbosity=args.verbosity,
         )
-    except Exception as err:
+    except Exception:
         if monitoring_enabled:
             probe_manager.stop()
         raise
