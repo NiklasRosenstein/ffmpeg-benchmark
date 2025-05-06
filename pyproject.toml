@@ -9,7 +9,7 @@ authors = [
     { name = "Anthony Monthe", email = "anthony@cloud-mercato.com" },
 ]
 description = "Handy tool for evaluate ffmpeg performance"
-readme = "README.rst"
+readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3"
 classifiers = [
@@ -31,7 +31,7 @@ keywords = ["benchmark", "machine learning", "deep learning"]
 dependencies = [
     "ffmpeg-python>=0.2.0",
     "handystats @ https://github.com/cloudmercato/handystats/archive/refs/heads/main.zip",
-    "probes",
+    "probes @ https://github.com/cloudmercato/Probes/archive/refs/heads/main.zip",
 ]
 
 [project.urls]
@@ -64,9 +64,6 @@ exclude_lines = [
     "noqa",
     "NotImplemented",
 ]
-
-[tool.uv.sources]
-probes = { git = "https://github.com/cloudmercato/Probes" }
 
 [dependency-groups]
 dev = [

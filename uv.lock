@@ -27,7 +27,7 @@ dev = [
 requires-dist = [
     { name = "ffmpeg-python", specifier = ">=0.2.0" },
     { name = "handystats", url = "https://github.com/cloudmercato/handystats/archive/refs/heads/main.zip" },
-    { name = "probes", git = "https://github.com/cloudmercato/Probes" },
+    { name = "probes", url = "https://github.com/cloudmercato/Probes/archive/refs/heads/main.zip" },
 ]
 
 [package.metadata.requires-dev]
@@ -72,10 +72,17 @@ wheels = [
 [[package]]
 name = "probes"
 version = "0.1.0"
-source = { git = "https://github.com/cloudmercato/Probes#447f44566c69c7f9add8f612dd004eafe27324e6" }
+source = { url = "https://github.com/cloudmercato/Probes/archive/refs/heads/main.zip" }
 dependencies = [
     { name = "psutil", version = "6.1.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.6'" },
     { name = "psutil", version = "7.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.6'" },
+]
+sdist = { hash = "sha256:58950d91eb64112b9f84ff14a8111fb91a516229b2c018c80338ea84823c5223" }
+
+[package.metadata]
+requires-dist = [
+    { name = "psutil" },
+    { name = "pynvml", marker = "extra == 'nvidia'" },
 ]
 
 [[package]]
