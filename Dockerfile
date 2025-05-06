@@ -1,23 +1,24 @@
 FROM linuxserver/ffmpeg:latest
 
-COPY . /ffmpeg-benchmark
+RUN apt-get update && apt-get install git -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /assets
+COPY --from=ghcr.io/astral-sh/uv:0.7.2 /uv /uvx /bin/
 
-RUN apt-get update && \
-    apt-get install -y python3 python3-pip python3-venv git
+WORKDIR /app
 
-RUN python3 -m venv /venv
-RUN /venv/bin/pip install ffmpeg-python --no-cache-dir
-RUN /venv/bin/pip install -e /ffmpeg-benchmark --no-cache-dir
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    unset VIRTUAL_ENV && uv sync --locked --no-install-project --no-dev
 
-RUN rm -rf \
-    /var/lib/apt/lists/* \
-    /var/tmp/* 
+ADD pyproject.toml uv.lock README.rst /app
+ADD ffmpeg_benchmark /app/ffmpeg_benchmark
+
+RUN --mount=type=cache,target=/root/.cache/uv \
+    unset VIRTUAL_ENV && uv sync --locked --no-dev
+
+RUN ln -s /app/.venv/bin/ffmpeg-benchmark /bin/ffmpeg-benchmark
 
 VOLUME /assets
-VOLUME /ffmpeg-benchmark
 
-CMD ["/bin/bash"]
-
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["/bin/ffmpeg-benchmark"]
