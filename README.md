@@ -63,8 +63,7 @@ $ docker run --pull always --rm -it -v $PWD:/assets \
 
 <!-- runcmd code: uv run ffmpeg-benchmark --help -->
 ```
-usage: ffmpeg-benchmark [-h] [-v VERBOSITY] [-q]
-                        {probe,transcode,psnr,vmaf} ...
+usage: ffmpeg-benchmark [-h] [-v VERBOSITY] [-q] {probe,transcode,psnr,vmaf} ...
 
 positional arguments:
   {probe,transcode,psnr,vmaf}
@@ -76,8 +75,7 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -v, --verbosity VERBOSITY
-                        0: Muted, 1: Info, 2: Verbose, 3: Full verbose 4:
-                        ffmpeg verbose
+                        0: Muted, 1: Info, 2: Verbose, 3: Full verbose 4: ffmpeg verbose
   -q, --quiet           Completly disable any output
 ```
 <!-- end runcmd -->
