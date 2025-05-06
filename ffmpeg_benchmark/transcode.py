@@ -1,4 +1,6 @@
+import atexit
 import re
+from tempfile import TemporaryDirectory
 import time
 import platform
 import logging
@@ -342,6 +344,12 @@ def transcode(**kwargs):
 
 def main(args):
     probe_manager = None  # Initialize probe_manager
+
+    if args.input.startswith("http://") or args.input.startswith("https://"):
+        logger.info("Downloading input file from %s", args.input)
+        tmpdir = TemporaryDirectory()
+        atexit.register(tmpdir.cleanup)
+        args.input = utils.download_video_file(args.input, tmpdir.name + "/input.mp4")
 
     if args.monitoring_enabled:
         if has_probes:

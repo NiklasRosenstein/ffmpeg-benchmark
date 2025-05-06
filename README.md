@@ -12,6 +12,7 @@ __Table of Contents__
   * [Quickstart](#quickstart)
     * [Docker](#docker)
     * [Uv](#uv)
+    * [Fetch input video from URL](#fetch-input-video-from-url)
   * [Usage](#usage)
 * [Contribute](#contribute)
 <!-- end toc -->
@@ -46,6 +47,16 @@ To test with hardware acceleration, check out the [linuxserver/ffmpeg] Docker im
 ```console
 $ uvx git+https://github.com/niklasrosenstein/ffmpeg-benchmark \
   transcode -i bbb_sunflower_2160p_60fps_normal.mp4
+```
+
+### Fetch input video from URL
+
+The `ffmpeg-benchmark transcode` command supports fetching the input from a URL. The file _may_ be a ZIP file with a single video file inside.
+
+```console
+$ docker run --rm -it -v $PWD:/assets \
+  ghcr.io/niklasrosenstein/ffmpeg-benchmark:main transcode \
+  -i https://download.blender.org/demo/movies/BBB/bbb_sunflower_2160p_60fps_normal.mp4.zip
 ```
 
 ## Usage

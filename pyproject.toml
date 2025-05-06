@@ -32,6 +32,7 @@ dependencies = [
     "ffmpeg-python>=0.2.0",
     "handystats @ https://github.com/cloudmercato/handystats/archive/refs/heads/main.zip",
     "probes @ https://github.com/cloudmercato/Probes/archive/refs/heads/main.zip",
+    "requests>=2.25.1",
 ]
 
 [project.urls]
