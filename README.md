@@ -75,7 +75,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  -v, --verbosity VERBOSITY
+  -v VERBOSITY, --verbosity VERBOSITY
                         0: Muted, 1: Info, 2: Verbose, 3: Full verbose 4: ffmpeg verbose
   -q, --quiet           Completly disable any output
 ```
