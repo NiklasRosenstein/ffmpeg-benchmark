@@ -15,8 +15,8 @@ STATS_FILE = "psnr_logfile.txt"
 def make_parser(subparsers):
     parser = subparsers.add_parser("psnr", help="Evaluate quality with PSNR")
 
-    parser.add_argument("--original-input", "-i")
-    parser.add_argument("--new-input", "-I")
+    parser.add_argument("--original-input", "-i", required=True)
+    parser.add_argument("--new-input", "-I", required=True)
     parser.add_argument("--stats-file", default=STATS_FILE)
 
 

@@ -58,7 +58,7 @@ def make_parser(subparsers):
     parser.add_argument("--processes", "-p", type=int, default=1, help="Number of simulataneous ffmpeg process.")
     parser.add_argument("--filter-threads", type=int, help="Number of threads are used to process a filter pipeline.")
 
-    parser.add_argument("--input", "-i")
+    parser.add_argument("--input", "-i", required=True)
     parser.add_argument("--input-format", "-if", required=False)
     parser.add_argument("--input-video-codec", '-ic:v', required=False)
     parser.add_argument("--input-audio-codec", '-ic:a', required=False)

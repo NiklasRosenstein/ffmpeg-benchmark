@@ -14,8 +14,8 @@ STATS_FILE = "vmaf.json"
 def make_parser(subparsers):
     parser = subparsers.add_parser("vmaf", help="Evaluate quality with WMAF")
 
-    parser.add_argument("--original-input", "-i")
-    parser.add_argument("--new-input", "-I")
+    parser.add_argument("--original-input", "-i", required=True)
+    parser.add_argument("--new-input", "-I", required=True)
     parser.add_argument("--stats-file", default=STATS_FILE)
 
 

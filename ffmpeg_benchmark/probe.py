@@ -4,7 +4,7 @@ import ffmpeg
 def make_parser(subparsers):
     parser = subparsers.add_parser("probe", help="Get info about an input")
 
-    parser.add_argument("--input", "-i")
+    parser.add_argument("--input", "-i", required=True)
 
 
 def probe(input):
