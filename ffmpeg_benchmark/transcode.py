@@ -222,7 +222,7 @@ class Transcoder:
             'hwaccel': self.hwaccel,
         }
         if self.input_disable_audio:
-            input_kwargs['an'] = None
+            input_kwargs['an'] = None  # pyright: ignore
         if self.filter_threads is not None:
             input_kwargs['filter_threads'] = self.filter_threads
         if self.input_thread_queue_size is not None:
@@ -247,7 +247,7 @@ class Transcoder:
         if self.output_video_codec:
             output_kwargs['c:v'] = self.output_video_codec
         if self.output == '/dev/null':
-            output_kwargs['format'] = self.output_format or 'null'
+            output_kwargs['format'] = self.output_format or 'null'  # pyright: ignore
         if self.output_disable_audio:
             output_kwargs['an'] = None
         if self.output_thread_queue_size is not None:
@@ -341,27 +341,31 @@ def transcode(**kwargs):
 
 
 def main(args):
-    monitoring_enabled = args.monitoring_enabled
-    if not has_probes and monitoring_enabled:
-        logger.warning("Monitoring is enabled without probes, please install it")
-        monitoring_enabled = False
-    if monitoring_enabled:
-        monitoring_probers = args.monitoring_probers
-        if not monitoring_probers:
-            monitoring_probers = [
-                'probes.probers.system.CpuProber',
-                'probes.probers.system.MemoryProber',
-            ]
-            sys_plat = platform.system()
-            if sys_plat == 'Darwin':
-                monitoring_probers += ['probes.probers.macos.MacosProber']
-        probe_manager = ProbeManager(
-            interval=args.monitoring_interval,
-            probers=monitoring_probers,
-        )
-        probe_manager.start()
-        logger.info("Started monitoring")
-        logger.debug("Monitoring prober: %s", monitoring_probers)
+    probe_manager = None  # Initialize probe_manager
+
+    if args.monitoring_enabled:
+        if has_probes:
+            monitoring_probers = args.monitoring_probers
+            if not monitoring_probers:
+                monitoring_probers = [
+                    'probes.probers.system.CpuProber',
+                    'probes.probers.system.MemoryProber',
+                ]
+                sys_plat = platform.system()
+                if sys_plat == 'Darwin':
+                    monitoring_probers += ['probes.probers.macos.MacosProber']
+
+            # ProbeManager (class) is guaranteed to be defined here due to 'if has_probes:'
+            probe_manager = ProbeManager(  # pyright: ignore
+                interval=args.monitoring_interval,
+                probers=monitoring_probers,
+            )
+            probe_manager.start()
+            logger.info("Started monitoring")
+            logger.debug("Monitoring prober: %s", monitoring_probers)
+        else:
+            logger.warning("Monitoring is enabled but probes module is not available. Monitoring will be disabled.")
+            # probe_manager remains None, so monitoring features dependent on it won't run
 
     try:
         results = transcode(
@@ -387,11 +391,11 @@ def main(args):
             verbosity=args.verbosity,
         )
     except Exception:
-        if monitoring_enabled:
+        if probe_manager:  # Check if probe_manager was initialized
             probe_manager.stop()
         raise
     # Add monitoring data
-    if monitoring_enabled:
+    if probe_manager:  # Check if probe_manager was initialized
         probe_manager.stop()
         logger.info("Stopped monitoring")
         probe_data = probe_manager.get_results()

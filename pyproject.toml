@@ -31,6 +31,7 @@ keywords = ["benchmark", "machine learning", "deep learning"]
 dependencies = [
     "ffmpeg-python>=0.2.0",
     "handystats @ https://github.com/cloudmercato/handystats/archive/refs/heads/main.zip",
+    "probes",
 ]
 
 [project.urls]
@@ -62,4 +63,12 @@ show_missing = true
 exclude_lines = [
     "noqa",
     "NotImplemented",
+]
+
+[tool.uv.sources]
+probes = { git = "https://github.com/cloudmercato/Probes" }
+
+[dependency-groups]
+dev = [
+    "pyright>=0.0.13.post0",
 ]

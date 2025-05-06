@@ -106,8 +106,8 @@ def psnr(
 
 def main(args):
     results = psnr(
-        input=args.input,
-        output=args.output,
-        output_video_codec=args.output_video_codec,
+        ori_input=args.original_input,
+        new_input=args.new_input,
+        stats_file=args.stats_file,
     )
     return results
