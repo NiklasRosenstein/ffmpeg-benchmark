@@ -61,7 +61,7 @@ $ docker run --pull always --rm -it -v $PWD:/assets \
 
 ## Usage
 
-<!-- runcmd code: uv run ffmpeg-benchmark --help -->
+<!-- runcmd code: COLUMNS=100 uv run ffmpeg-benchmark --help -->
 ```
 usage: ffmpeg-benchmark [-h] [-v VERBOSITY] [-q] {probe,transcode,psnr,vmaf} ...
 

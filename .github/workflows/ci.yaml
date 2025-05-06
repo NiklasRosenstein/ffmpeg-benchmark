@@ -23,7 +23,7 @@ jobs:
       - name: Run pyright
         run: uv run pyright
       - name: Check README state
-        run: diff -u README.md <(COLUMNS=100 uvx mksync==0.1.4 README.md)
+        run: diff -u README.md <(uvx mksync==0.1.4 README.md)
 
   build-and-publish:
     runs-on: ubuntu-latest
