@@ -58,6 +58,7 @@ def make_parser(subparsers):
     parser = subparsers.add_parser("transcode", help="Evaluate transcoding performance")
 
     parser.add_argument("--processes", "-p", type=int, default=1, help="Number of simulataneous ffmpeg process.")
+    parser.add_argument("--threads", type=int, help="Number of threads to use.")
     parser.add_argument("--filter-threads", type=int, help="Number of threads are used to process a filter pipeline.")
 
     parser.add_argument("--input", "-i", required=True)
@@ -107,6 +108,7 @@ class Transcoder:
         input,
 
         processes=1,
+        threads=None,
         filter_threads=None,
 
         input_disable_audio=False,
@@ -128,6 +130,7 @@ class Transcoder:
         verbosity=1,
     ):
         self.processes = processes
+        self.threads = threads
         self.filter_threads = filter_threads
 
         self.input = input
@@ -225,6 +228,8 @@ class Transcoder:
         }
         if self.input_disable_audio:
             input_kwargs['an'] = None  # pyright: ignore
+        if self.threads is not None:
+            input_kwargs['threads'] = self.threads
         if self.filter_threads is not None:
             input_kwargs['filter_threads'] = self.filter_threads
         if self.input_thread_queue_size is not None:
@@ -379,6 +384,7 @@ def main(args):
         results = transcode(
             hwaccel=args.hwaccel,
             processes=args.processes,
+            threads=args.threads,
             filter_threads=args.filter_threads,
 
             input=args.input,
