@@ -34,6 +34,9 @@ def main():
     vmaf.make_parser(subparsers)
 
     args = parser.parse_args()
+    if not args.action:
+        parser.print_usage()
+        return
 
     set_logger(0 if args.quiet else args.verbosity)
 
