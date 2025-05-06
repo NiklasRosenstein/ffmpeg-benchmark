@@ -12,7 +12,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     unset VIRTUAL_ENV && uv sync --frozen --no-install-project --no-dev
 
-ADD pyproject.toml uv.lock README.rst /app
+ADD pyproject.toml uv.lock README.md /app
 ADD ffmpeg_benchmark /app/ffmpeg_benchmark
 
 RUN --mount=type=cache,target=/root/.cache/uv \
