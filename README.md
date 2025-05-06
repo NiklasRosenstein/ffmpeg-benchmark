@@ -35,8 +35,8 @@ $ du -h bbb_sunflower_2160p_60fps_normal.mp4
 ### Docker
 
 ```console
-$ docker run --rm -it -v $PWD:/assets \
-  ghcr.io/niklasrosenstein/ffmpeg-benchmark:main transcode \
+$ docker run --pull always --rm -it -v $PWD:/assets \
+  ghcr.io/niklasrosenstein/ffmpeg-benchmark:main -v 2 transcode \
   -i /assets/bbb_sunflower_2160p_60fps_normal.mp4
 ```
 
@@ -45,7 +45,7 @@ To test with hardware acceleration, check out the [linuxserver/ffmpeg] Docker im
 ### Uv
 
 ```console
-$ uvx git+https://github.com/niklasrosenstein/ffmpeg-benchmark \
+$ uvx git+https://github.com/niklasrosenstein/ffmpeg-benchmark -v 2 \
   transcode -i bbb_sunflower_2160p_60fps_normal.mp4
 ```
 
@@ -54,8 +54,8 @@ $ uvx git+https://github.com/niklasrosenstein/ffmpeg-benchmark \
 The `ffmpeg-benchmark transcode` command supports fetching the input from a URL. The file _may_ be a ZIP file with a single video file inside.
 
 ```console
-$ docker run --rm -it -v $PWD:/assets \
-  ghcr.io/niklasrosenstein/ffmpeg-benchmark:main transcode \
+$ docker run --pull always --rm -it -v $PWD:/assets \
+  ghcr.io/niklasrosenstein/ffmpeg-benchmark:main -v 2 transcode \
   -i https://download.blender.org/demo/movies/BBB/bbb_sunflower_2160p_60fps_normal.mp4.zip
 ```
 
